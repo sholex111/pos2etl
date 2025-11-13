@@ -1,0 +1,53 @@
+# docker-compose.yml
+
+#version: '3.8'
+
+services:
+  # 1. The PostgreSQL Database Service
+  db:
+    image: postgres:17
+    container_name: pgsql_db
+    restart: always
+    env_file:
+      - .env  # Loads variables from the .env file
+    ports:
+      - "5432:5432" # Maps port 55432 on your host to 5432 in the container
+    volumes:
+      - pgdata:/var/lib/postgresql/data # Persists database data on your host machine
+
+  # 2. The ETL Service
+  etl:
+    build: .  # Builds the image from the Dockerfile in the current directory
+    container_name: etl_service
+    restart: on-failure # Only restarts if the script fails
+    env_file:
+      - .env
+    environment: # <-- ADD this block to define internal connection details
+      POSTGRES_HOST: db    # The service name of the database container
+      POSTGRES_PORT: 5432  # The container's internal port
+    volumes:
+      - ./app:/app/
+      - ./data:/app/data/ # Mounts your local data folder into the container
+    command: ["python", "etl.py"] # Overrides the Dockerfile CMD to run the ETL script
+    depends_on:
+      - db # Ensures the 'db' service is running before this one starts
+
+  # 3. The Streamlit Dashboard Service
+  dashboard:
+    build: . # Uses the same image as the ETL service
+    container_name: dashboard_service
+    restart: always
+    env_file:
+      - .env
+    ports:
+      - "8501:8501" # Maps port 8501 for the Streamlit app
+    volumes:
+      - ./app:/app/ # Mounts the app code for live updates
+    # The command is defined in the Dockerfile CMD, but we can be explicit:
+    command: ["streamlit", "run", "dashboard.py", "--server.port=8501", "--server.address=0.0.0.0"]
+    depends_on:
+      - db
+      - etl # Ensures the ETL has run at least once before the dashboard starts
+
+volumes:
+  pgdata: # Defines the named volume for data persistence
