@@ -49,5 +49,80 @@ services:
       - db
       - etl # Ensures the ETL has run at least once before the dashboard starts
 
+  # scheduler:
+  #   image: docker/compose:1.29.2 # Use a lightweight image with docker-compose installed
+  #   container_name: scheduler_service
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock # Allows cron to run docker commands
+  #     - .:/app # Maps the entire project folder, including docker-compose.yml and scheduler.sh
+  #   working_dir: /app
+  #   command: sh /app/scheduler.sh # Runs the script we just created    
+  #   depends_on:
+  #     - db
+  #     - etl
+
+  # 3. ETL Scheduler Service
+  # scheduler:    
+  #   image: alpine:latest   # Uses a stable, lightweight image with necessary tools for the loop
+  #   container_name: scheduler_service
+  #   # This mounts the Docker socket and project files, which is essential for 
+  #   # the container to run docker-compose commands against its siblings (like 'etl').
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #     - .:/app 
+  #   working_dir: /app
+  #   # The command runs an infinite loop via 'sh -c'. 
+  #   # It executes 'docker-compose run --rm etl' every 60 seconds.
+  #   #command: sh -c "while true; do echo '--- $$(date) - Running ETL (Service: etl) ---'; docker-compose run --rm etl; echo '--- $$(date) - ETL finished. Sleeping for 60s ---'; sleep 60; done"
+  #   command: sh -c "while true; do ... docker-compose run --rm etl; ... sleep 60; done"
+  #   # Ensures the database and ETL services are fully initialized before the scheduler attempts to run the ETL.
+  #   depends_on:
+  #     - db
+  #     - etl
+
+  # scheduler:
+  #   image: python:3.11-slim
+  #   container_name: scheduler_service
+  #   restart: always
+  #   env_file:
+  #     - .env
+  #   volumes:
+  #     - ./app:/app
+  #   working_dir: /app
+  #   # Runs the ETL script every 60s inside the same container
+  #   command: >
+  #     sh -c "while true; do
+  #       echo '--- $(date) - running etl.py ---';
+  #       python /app/etl.py || echo 'etl failed with exit $?';
+  #       echo '--- $(date) - sleeping 60s ---';
+  #       sleep 60;
+  #     done"
+  #   depends_on:
+  #     - db
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: dockerfile.scheduler
+    container_name: scheduler_service
+    restart: always
+    env_file:
+      - .env
+    volumes:
+      - ./app:/app
+      - ./data:/app/data      # <--- important: bind host data folder into container
+    working_dir: /app
+    depends_on:
+      - db
+    # no need to re-specify the loop; it's in the Dockerfile CMD, but you can keep it here:
+    command: >
+      sh -c "while true; do
+        echo \"--- $(date) - running etl.py ---\";
+        python /app/etl.py || echo \"etl failed with exit $?\" ;
+        echo \"--- $(date) - sleeping 60s ---\";
+        sleep 60;
+      done"
+
+
 volumes:
   pgdata: # Defines the named volume for data persistence

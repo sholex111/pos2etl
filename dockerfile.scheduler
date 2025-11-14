@@ -1,0 +1,19 @@
+# Dockerfile.scheduler
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# install system deps that pandas sometimes needs (optional)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# copy requirements and install
+COPY requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
+
+# copy app code
+COPY . /app
+
+# default command will be overridden by compose, but keep a safe CMD
+CMD ["sh", "-c", "while true; do echo \"--- $(date) - running etl.py ---\"; python /app/etl.py || echo \"etl failed with exit $?\"; echo \"--- $(date) - sleeping 60s ---\"; sleep 60; done"]
